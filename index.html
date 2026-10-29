@@ -48,7 +48,7 @@
   label { display: flex; flex-direction: column; font-size: .8rem; color: var(--muted); gap: 4px; }
   input {
     font: inherit; color: var(--ink);
-    padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px;
+    padding: 9px 10px; border: 1px solid var(--line); border-radius: 99px;
     background: #fff; min-width: 0;
   }
   input:focus { outline: 2px solid var(--green); outline-offset: 1px; }
@@ -191,9 +191,6 @@ const KUNCI_SIMPAN = "stokDapurV1";
 
 // ---------------------------------------------------------------------
 //  KONFIGURASI FIREBASE
-//  Ganti semua nilai ISI_... di bawah dengan konfigurasi dari project
-//  Firebase kamu (lihat TUTORIAL_FIREBASE.md). Selama belum diganti,
-//  aplikasi berjalan di MODE LOKAL (data hanya di browser ini).
 // ---------------------------------------------------------------------
 const firebaseConfig = {
   apiKey: "AiZaSyAyELwRPF1Zai6fBF1w3Wx6P5y7a_OGwHQ",
@@ -203,27 +200,9 @@ const firebaseConfig = {
   messagingSenderId: "905253379537",
   appId: "1:905253379537:web:df2ead92d99121003694f0"
 };
-import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
- 
-  apiKey: "AIzaSyAyELwRPFlZai6fBF1w3Wx6P5y7a_OGwHQ",
-  authDomain: "webcbcb-da2a3.firebaseapp.com",
-  projectId: "webcbcb-da2a3",
-  storageBucket: "webcbcb-da2a3.firebasestorage.app",
-  messagingSenderId: "905253379537",
-  appId: "1:905253379537:web:df2ead92d99121003694f0"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-};
-
-// true jika konfigurasi sudah diisi dan library Firebase berhasil dimuat
-const MODE_ONLINE = firebaseConfig.apiKey.indexOf("ISI_") !== 0 && typeof firebase !== "undefined";
+// Mode online aktif jika Firebase library dimuat dan API Key valid
+const MODE_ONLINE = firebaseConfig.apiKey && typeof firebase !== "undefined";
 let koleksi = null;               // koleksi "bahan" di Firestore
 
 // ARRAY utama penyimpan data. Tiap elemen = satu bahan:
@@ -285,8 +264,6 @@ function tampilkanToast(pesan) {
 }
 
 // ------------------------- PENYIMPANAN -------------------------------
-// MODE LOKAL  : data disimpan di browser (localStorage)
-// MODE ONLINE : data disimpan di Firebase Firestore dan dibagi ke semua pengguna
 
 function buatId() {
   return "b" + Date.now() + Math.floor(Math.random() * 1000);
@@ -341,7 +318,7 @@ function mulaiOnline() {
     renderSemua();
   }, function (err) {
     tampilkanModeInfo("Gagal terhubung ke database: " + err.message +
-      " (cek aturan Firestore di TUTORIAL_FIREBASE.md)", "bad");
+      " (Cek Aturan/Rules Firestore Anda di Firebase Console)", "bad");
   });
 }
 
@@ -383,7 +360,6 @@ function pakaiBahan(indeks, banyak) {
   }
   const sisa = bahan.jumlah - banyak;
   if (MODE_ONLINE) {
-    // increment negatif: aman jika dua orang memakai stok bersamaan
     koleksi.doc(bahan.id).update({ jumlah: firebase.firestore.FieldValue.increment(-banyak) })
       .catch(function (err) { tampilkanToast("Gagal menyimpan: " + err.message); });
   } else {
@@ -404,7 +380,7 @@ function hapusBahan(indeks) {
     koleksi.doc(bahan.id).delete()
       .catch(function (err) { tampilkanToast("Gagal menghapus: " + err.message); });
   } else {
-    daftarBahan.splice(indeks, 1);       // hapus 1 elemen array
+    daftarBahan.splice(indeks, 1);
     simpanData();
   }
   tampilkanToast(bahan.nama + " dihapus.");
@@ -456,7 +432,6 @@ function hapusSemua() {
   }
 }
 
-// Mengurutkan salinan array berdasarkan sisa hari (bubble sort)
 function urutkanPrioritas() {
   const hasil = daftarBahan.slice();
   for (let i = 0; i < hasil.length - 1; i++) {
@@ -663,7 +638,7 @@ document.getElementById("tabelStok").addEventListener("click", function (e) {
   if (!btn || !btn.dataset.aksi) return;
   const indeks = Number(btn.dataset.indeks);
 
-  switch (btn.dataset.aksi) {          // PERCABANGAN switch-case
+  switch (btn.dataset.aksi) {
     case "pakai": {
       const input = btn.parentElement.querySelector("input");
       pakaiBahan(indeks, parseInt(input.value, 10));
@@ -679,12 +654,12 @@ document.getElementById("tabelStok").addEventListener("click", function (e) {
 // ------------------------------ MULAI --------------------------------
 tanggalHariIni = tanggalSekarang();
 document.getElementById("hariIni").value = tanggalHariIni;
+
 if (MODE_ONLINE) {
-  mulaiOnline();                 // data datang dari Firestore, lalu tampilan diperbarui otomatis
+  mulaiOnline();
 } else {
   muatData();
-  tampilkanModeInfo("Mode lokal: data hanya tersimpan di browser ini. " +
-    "Isi konfigurasi Firebase agar data dibagi ke semua pengguna.", "warn");
+  tampilkanModeInfo("Mode lokal: data hanya tersimpan di browser ini.", "warn");
 }
 renderSemua();
 </script>
