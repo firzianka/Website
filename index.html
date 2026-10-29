@@ -196,12 +196,23 @@ const KUNCI_SIMPAN = "stokDapurV1";
 //  aplikasi berjalan di MODE LOKAL (data hanya di browser ini).
 // ---------------------------------------------------------------------
 const firebaseConfig = {
-  apiKey: "ISI_API_KEY",
-  authDomain: "ISI_PROJECT_ID.firebaseapp.com",
-  projectId: "ISI_PROJECT_ID",
-  storageBucket: "ISI_PROJECT_ID.firebasestorage.app",
-  messagingSenderId: "ISI_SENDER_ID",
-  appId: "ISI_APP_ID"
+  apiKey: // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyAyELwRPFlZai6fBF1w3Wx6P5y7a_OGwHQ",
+  authDomain: "webcbcb-da2a3.firebaseapp.com",
+  projectId: "webcbcb-da2a3",
+  storageBucket: "webcbcb-da2a3.firebasestorage.app",
+  messagingSenderId: "905253379537",
+  appId: "1:905253379537:web:01daa9cba8c2f4093694f0"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
 };
 
 // true jika konfigurasi sudah diisi dan library Firebase berhasil dimuat
