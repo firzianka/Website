@@ -298,9 +298,17 @@ function tampilkanModeInfo(pesan, kelas) {
 }
 
 // Mode online: dengarkan perubahan data secara real-time
+// Mode online: dengarkan perubahan data secara real-time
 function mulaiOnline() {
-  firebase.initializeApp(firebaseConfig);
-  koleksi = firebase.firestore().collection("bahan");
+  // Inisialisasi Firebase Compat
+  if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+  
+  // Buat instance Firestore dengan benar
+  const db = firebase.firestore();
+  koleksi = db.collection("bahan");
+
   tampilkanModeInfo("Menghubungkan ke database online...", "warn");
 
   koleksi.onSnapshot(function (snapshot) {
@@ -308,8 +316,12 @@ function mulaiOnline() {
     snapshot.forEach(function (doc) {
       const d = doc.data();
       baru.push({
-        id: doc.id, nama: d.nama, jumlah: d.jumlah, satuan: d.satuan,
-        kadaluarsa: d.kadaluarsa, dibuat: d.dibuat || 0
+        id: doc.id, 
+        nama: d.nama, 
+        jumlah: d.jumlah, 
+        satuan: d.satuan,
+        kadaluarsa: d.kadaluarsa, 
+        dibuat: d.dibuat || 0
       });
     });
     baru.sort(function (a, b) { return a.dibuat - b.dibuat; });
@@ -318,10 +330,10 @@ function mulaiOnline() {
     renderSemua();
   }, function (err) {
     tampilkanModeInfo("Gagal terhubung ke database: " + err.message +
-      " (Cek Aturan/Rules Firestore Anda di Firebase Console)", "bad");
+      " (Cek Aturan/Rules Firestore di Firebase Console)", "bad");
   });
 }
-
+   
 // ------------------------------ FITUR --------------------------------
 
 function cariIndeks(nama) {
