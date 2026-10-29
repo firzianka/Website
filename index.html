@@ -107,6 +107,8 @@
 
 <main class="wrap">
 
+  <div id="modeInfo"></div>
+
   <section class="card">
     <div class="row">
       <label>Tanggal hari ini
@@ -176,6 +178,8 @@
 <footer>Mini Project Pengenalan Pemrograman · Sistem Pengelola Stok Bahan Makanan</footer>
 <div id="toast" role="status"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
 // =====================================================================
 //  SISTEM PENGELOLA STOK BAHAN MAKANAN (VERSI WEB)
@@ -184,6 +188,25 @@
 
 const BATAS_SEGERA = 3;           // <= 3 hari = "segera pakai"
 const KUNCI_SIMPAN = "stokDapurV1";
+
+// ---------------------------------------------------------------------
+//  KONFIGURASI FIREBASE
+//  Ganti semua nilai ISI_... di bawah dengan konfigurasi dari project
+//  Firebase kamu (lihat TUTORIAL_FIREBASE.md). Selama belum diganti,
+//  aplikasi berjalan di MODE LOKAL (data hanya di browser ini).
+// ---------------------------------------------------------------------
+const firebaseConfig = {
+  apiKey: "ISI_API_KEY",
+  authDomain: "ISI_PROJECT_ID.firebaseapp.com",
+  projectId: "ISI_PROJECT_ID",
+  storageBucket: "ISI_PROJECT_ID.firebasestorage.app",
+  messagingSenderId: "ISI_SENDER_ID",
+  appId: "ISI_APP_ID"
+};
+
+// true jika konfigurasi sudah diisi dan library Firebase berhasil dimuat
+const MODE_ONLINE = firebaseConfig.apiKey.indexOf("ISI_") !== 0 && typeof firebase !== "undefined";
+let koleksi = null;               // koleksi "bahan" di Firestore
 
 // ARRAY utama penyimpan data. Tiap elemen = satu bahan:
 // { nama, jumlah, satuan, kadaluarsa: "YYYY-MM-DD" }
@@ -243,9 +266,16 @@ function tampilkanToast(pesan) {
   setTimeout(function () { t.classList.remove("show"); }, 2200);
 }
 
-// ------------------------- PENYIMPANAN LOKAL -------------------------
+// ------------------------- PENYIMPANAN -------------------------------
+// MODE LOKAL  : data disimpan di browser (localStorage)
+// MODE ONLINE : data disimpan di Firebase Firestore dan dibagi ke semua pengguna
+
+function buatId() {
+  return "b" + Date.now() + Math.floor(Math.random() * 1000);
+}
 
 function simpanData() {
+  if (MODE_ONLINE) return;               // mode online tidak memakai localStorage
   try {
     localStorage.setItem(KUNCI_SIMPAN, JSON.stringify(daftarBahan));
   } catch (e) { /* penyimpanan tidak tersedia, abaikan */ }
@@ -256,9 +286,45 @@ function muatData() {
     const mentah = localStorage.getItem(KUNCI_SIMPAN);
     if (mentah) {
       const hasil = JSON.parse(mentah);
-      if (Array.isArray(hasil)) daftarBahan = hasil;
+      if (Array.isArray(hasil)) {
+        for (let i = 0; i < hasil.length; i++) {
+          if (!hasil[i].id) hasil[i].id = buatId();
+        }
+        daftarBahan = hasil;
+      }
     }
   } catch (e) { daftarBahan = []; }
+}
+
+function tampilkanModeInfo(pesan, kelas) {
+  const wadah = document.getElementById("modeInfo");
+  wadah.replaceChildren();
+  wadah.appendChild(buatEl("div", pesan, "alert " + kelas));
+}
+
+// Mode online: dengarkan perubahan data secara real-time
+function mulaiOnline() {
+  firebase.initializeApp(firebaseConfig);
+  koleksi = firebase.firestore().collection("bahan");
+  tampilkanModeInfo("Menghubungkan ke database online...", "warn");
+
+  koleksi.onSnapshot(function (snapshot) {
+    const baru = [];
+    snapshot.forEach(function (doc) {
+      const d = doc.data();
+      baru.push({
+        id: doc.id, nama: d.nama, jumlah: d.jumlah, satuan: d.satuan,
+        kadaluarsa: d.kadaluarsa, dibuat: d.dibuat || 0
+      });
+    });
+    baru.sort(function (a, b) { return a.dibuat - b.dibuat; });
+    daftarBahan = baru;
+    tampilkanModeInfo("Mode online: data dibagi ke semua pengguna secara langsung.", "ok");
+    renderSemua();
+  }, function (err) {
+    tampilkanModeInfo("Gagal terhubung ke database: " + err.message +
+      " (cek aturan Firestore di TUTORIAL_FIREBASE.md)", "bad");
+  });
 }
 
 // ------------------------------ FITUR --------------------------------
@@ -275,8 +341,13 @@ function tambahBahan(nama, jumlah, satuan, kadaluarsa) {
     tampilkanToast("Bahan '" + nama + "' sudah ada.");
     return false;
   }
-  daftarBahan.push({ nama: nama, jumlah: jumlah, satuan: satuan, kadaluarsa: kadaluarsa });
-  simpanData();
+  if (MODE_ONLINE) {
+    koleksi.add({ nama: nama, jumlah: jumlah, satuan: satuan, kadaluarsa: kadaluarsa, dibuat: Date.now() })
+      .catch(function (err) { tampilkanToast("Gagal menyimpan: " + err.message); });
+  } else {
+    daftarBahan.push({ id: buatId(), nama: nama, jumlah: jumlah, satuan: satuan, kadaluarsa: kadaluarsa });
+    simpanData();
+  }
   tampilkanToast(nama + " ditambahkan.");
   return true;
 }
@@ -286,24 +357,46 @@ function pakaiBahan(indeks, banyak) {
   if (!bahan) return;
   if (!(banyak >= 1)) {
     tampilkanToast("Masukkan jumlah minimal 1.");
-  } else if (banyak > bahan.jumlah) {
+    return;
+  }
+  if (banyak > bahan.jumlah) {
     tampilkanToast("Stok tidak cukup (sisa " + bahan.jumlah + " " + bahan.satuan + ").");
+    return;
+  }
+  const sisa = bahan.jumlah - banyak;
+  if (MODE_ONLINE) {
+    // increment negatif: aman jika dua orang memakai stok bersamaan
+    koleksi.doc(bahan.id).update({ jumlah: firebase.firestore.FieldValue.increment(-banyak) })
+      .catch(function (err) { tampilkanToast("Gagal menyimpan: " + err.message); });
   } else {
-    bahan.jumlah -= banyak;
-    if (bahan.jumlah === 0) {
-      tampilkanToast(bahan.nama + " habis. Masukkan ke daftar belanja!");
-    } else {
-      tampilkanToast("Stok " + bahan.nama + " sekarang " + bahan.jumlah + " " + bahan.satuan + ".");
-    }
+    bahan.jumlah = sisa;
     simpanData();
+  }
+  if (sisa === 0) {
+    tampilkanToast(bahan.nama + " habis. Masukkan ke daftar belanja!");
+  } else {
+    tampilkanToast("Stok " + bahan.nama + " sekarang " + sisa + " " + bahan.satuan + ".");
   }
 }
 
 function hapusBahan(indeks) {
-  const nama = daftarBahan[indeks].nama;
-  daftarBahan.splice(indeks, 1);       // hapus 1 elemen array
-  simpanData();
-  tampilkanToast(nama + " dihapus.");
+  const bahan = daftarBahan[indeks];
+  if (!bahan) return;
+  if (MODE_ONLINE) {
+    koleksi.doc(bahan.id).delete()
+      .catch(function (err) { tampilkanToast("Gagal menghapus: " + err.message); });
+  } else {
+    daftarBahan.splice(indeks, 1);       // hapus 1 elemen array
+    simpanData();
+  }
+  tampilkanToast(bahan.nama + " dihapus.");
+}
+
+function teksTanggalDari(nomor) {
+  const t = new Date(nomor * 86400000);
+  return t.getUTCFullYear() + "-" +
+    String(t.getUTCMonth() + 1).padStart(2, "0") + "-" +
+    String(t.getUTCDate()).padStart(2, "0");
 }
 
 function muatDataContoh() {
@@ -315,18 +408,34 @@ function muatDataContoh() {
     { nama: "Roti",  jumlah: 1,  satuan: "bungkus", selisih: -2 },
     { nama: "Beras", jumlah: 5,  satuan: "kg",    selisih: 229 }
   ];
+  let urutan = 0;
   for (let i = 0; i < contoh.length; i++) {
     const c = contoh[i];
     if (cariIndeks(c.nama) === -1) {
-      const tgl = new Date((hari + c.selisih) * 86400000);
-      const teks = tgl.getUTCFullYear() + "-" +
-        String(tgl.getUTCMonth() + 1).padStart(2, "0") + "-" +
-        String(tgl.getUTCDate()).padStart(2, "0");
-      daftarBahan.push({ nama: c.nama, jumlah: c.jumlah, satuan: c.satuan, kadaluarsa: teks });
+      const kdl = teksTanggalDari(hari + c.selisih);
+      if (MODE_ONLINE) {
+        koleksi.add({ nama: c.nama, jumlah: c.jumlah, satuan: c.satuan, kadaluarsa: kdl, dibuat: Date.now() + urutan });
+        urutan++;
+      } else {
+        daftarBahan.push({ id: buatId(), nama: c.nama, jumlah: c.jumlah, satuan: c.satuan, kadaluarsa: kdl });
+      }
     }
   }
   simpanData();
   tampilkanToast("Data contoh dimuat.");
+}
+
+function hapusSemua() {
+  if (MODE_ONLINE) {
+    const batch = firebase.firestore().batch();
+    for (let i = 0; i < daftarBahan.length; i++) {
+      batch.delete(koleksi.doc(daftarBahan[i].id));
+    }
+    batch.commit().catch(function (err) { tampilkanToast("Gagal menghapus: " + err.message); });
+  } else {
+    daftarBahan = [];
+    simpanData();
+  }
 }
 
 // Mengurutkan salinan array berdasarkan sisa hari (bubble sort)
@@ -507,8 +616,7 @@ document.getElementById("btnContoh").addEventListener("click", function () {
 document.getElementById("btnReset").addEventListener("click", function () {
   if (daftarBahan.length === 0) return;
   if (confirm("Hapus semua data stok?")) {
-    daftarBahan = [];
-    simpanData();
+    hapusSemua();
     renderSemua();
   }
 });
@@ -553,7 +661,13 @@ document.getElementById("tabelStok").addEventListener("click", function (e) {
 // ------------------------------ MULAI --------------------------------
 tanggalHariIni = tanggalSekarang();
 document.getElementById("hariIni").value = tanggalHariIni;
-muatData();
+if (MODE_ONLINE) {
+  mulaiOnline();                 // data datang dari Firestore, lalu tampilan diperbarui otomatis
+} else {
+  muatData();
+  tampilkanModeInfo("Mode lokal: data hanya tersimpan di browser ini. " +
+    "Isi konfigurasi Firebase agar data dibagi ke semua pengguna.", "warn");
+}
 renderSemua();
 </script>
 </body>
